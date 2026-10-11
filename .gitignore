@@ -1,0 +1,29 @@
+# Gradle / build
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.cxx/
+out/
+gen/
+
+# 签名密钥（含私钥，勿提交）
+keystore.properties
+*.keystore
+*.jks
+
+# 构建产物
+*.apk
+*.ap_
+*.dex
+*.class
+*.hprof
+
+# 开发调试产物（UI dump / 截图 / 构建日志，可能含个人内容，勿提交）
+dump_*.xml
+screen.png
+debug-screen.png
+shot*.png
+build_output.txt
