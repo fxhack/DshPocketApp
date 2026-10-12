@@ -32,6 +32,7 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -46,7 +47,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 
 import androidx.compose.material3.Surface
 
-import androidx.compose.material3.Switch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -126,7 +126,9 @@ fun ChatScreen(
     onUnpinSession: (String) -> Unit = {},
     onFiles: () -> Unit = {},
     themeMode: String = "system",
-    onThemeChange: (String) -> Unit = {}
+    onThemeChange: (String) -> Unit = {},
+    showDrawer: Boolean = true,
+    useSafePadding: Boolean = true
 ) {
     val vm: ChatViewModel = viewModel()
     val state by vm.state.collectAsStateWithLifecycle()
@@ -151,7 +153,6 @@ fun ChatScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val drawerWidth = (LocalConfiguration.current.screenWidthDp * 0.5f).dp
     var drawerQuery by remember { mutableStateOf("") }
-    var drawerShowArchived by remember { mutableStateOf(false) }
     var drawerExpandedGroups by remember { mutableStateOf<Map<String, Boolean>>(mapOf("__ungrouped__" to true)) }
     var drawerRenameTarget by remember { mutableStateOf<SessionItem?>(null) }
     var drawerMenuSession by remember { mutableStateOf<SessionItem?>(null) }
@@ -160,11 +161,11 @@ fun ChatScreen(
     LaunchedEffect(baseline) { baseline?.items?.forEach { w -> if (w.workspaceId !in drawerExpandedGroups) drawerExpandedGroups = drawerExpandedGroups + (w.workspaceId to true) } }
     val drawerArchivedIds = baseline?.archivedSessionIds?.toSet() ?: emptySet()
     val drawerPinnedIds = baseline?.pinnedSessionIds?.toSet() ?: emptySet()
-    val drawerFiltered = remember(sessions, drawerQuery, drawerShowArchived, drawerArchivedIds) {
+    val drawerFiltered = remember(sessions, drawerQuery, drawerArchivedIds) {
         val q = drawerQuery.trim().lowercase()
         sessions.filter { s ->
             val isArchived = drawerArchivedIds.contains(s.sessionId)
-            if (!drawerShowArchived && isArchived) false
+            if (isArchived) false
             else if (q.isEmpty()) true
             else s.projections.values.title.orEmpty().lowercase().contains(q)
         }.sortedByDescending { drawerPinnedIds.contains(it.sessionId) }
@@ -245,15 +246,15 @@ fun ChatScreen(
             atBottom = info.totalItemsCount > 0 && last >= info.totalItemsCount - 2
         }
     }
-    // 新轮次到达：立即滚到最底部（不依赖 atBottom，确保新消息始终可见）
+    // 新轮次到达：如果用户在底部，自动滚到最底部
     LaunchedEffect(rows.size) {
-        if (didInitialScroll && rows.isNotEmpty()) {
+        if (didInitialScroll && atBottom && rows.isNotEmpty()) {
             listState.scrollToItem(rows.lastIndex, Int.MAX_VALUE)
         }
     }
-    // 内容增长（新消息、工具调用、流式文本）：始终滚到最底部
+    // 内容增长（新消息、工具调用、流式文本）：如果用户在底部，保持滚到最底部
     LaunchedEffect(rows.lastOrNull()) {
-        if (didInitialScroll && rows.isNotEmpty()) {
+        if (didInitialScroll && atBottom && rows.isNotEmpty()) {
             listState.scrollToItem(rows.lastIndex, Int.MAX_VALUE)
         }
     }
@@ -263,9 +264,9 @@ fun ChatScreen(
             listState.scrollToItem(rows.lastIndex, Int.MAX_VALUE)
         }
     }
-    // 流式内容增长时保持最新内容可见：始终滚到最底部
+    // 流式内容增长时保持最新内容可见：如果用户在底部，滚到最底部
     val scrollLastIntoView: suspend () -> Unit = {
-        if (didInitialScroll && rows.isNotEmpty()) {
+        if (didInitialScroll && atBottom && rows.isNotEmpty()) {
             listState.scrollToItem(rows.lastIndex, Int.MAX_VALUE)
         }
     }
@@ -275,10 +276,7 @@ fun ChatScreen(
             // Header: 标题 + 主题 + 文件 + 新建
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("会话", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.size(32.dp).clickable { onRefreshSessions() }) {
-                    Box(contentAlignment = Alignment.Center) { Text("\uD83D\uDD04", fontSize = 14.sp) }
-                }
-                Spacer(Modifier.width(4.dp))
+
                 val nextTheme = when (themeMode) { "light" -> "dark"; "dark" -> "system"; else -> "light" }
                 val themeIcon = when (themeMode) { "light" -> "\u2600"; "dark" -> "\u263e"; else -> "\u25d0" }
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.size(32.dp).clickable { onThemeChange(nextTheme) }) {
@@ -294,15 +292,9 @@ fun ChatScreen(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            // Search + archived toggle
+            // Search
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(value = drawerQuery, onValueChange = { drawerQuery = it }, modifier = Modifier.weight(1f), placeholder = { Text("\u641C\u7D22\u4F1A\u8BDD\u2026") }, singleLine = true, shape = MaterialTheme.shapes.large)
-                Spacer(Modifier.width(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("\u5F52\u6863", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(2.dp))
-                    Switch(checked = drawerShowArchived, onCheckedChange = { drawerShowArchived = it })
-                }
             }
             Spacer(Modifier.height(4.dp))
             // List content
@@ -366,7 +358,7 @@ fun ChatScreen(
                                         DropdownMenu(expanded = drawerMenuSession?.sessionId == s.sessionId && drawerMenuAnchor, onDismissRequest = { drawerMenuAnchor = false }) {
                                             DropdownMenuItem(text = { Text("\u91CD\u547D\u540D") }, onClick = { drawerMenuAnchor = false; drawerRenameTarget = s })
                                             DropdownMenuItem(text = { Text(if (isPinned) "\u53D6\u6D88\u7F6E\u9876" else "\u7F6E\u9876") }, onClick = { drawerMenuAnchor = false; if (isPinned) onUnpinSession(s.sessionId) else onPinSession(s.sessionId) })
-                                            DropdownMenuItem(text = { Text(if (isArchived) "\u53D6\u6D88\u5F52\u6863" else "\u5F52\u6863") }, onClick = { drawerMenuAnchor = false; if (isArchived) onUnarchiveSession(s.sessionId) else onArchiveSession(s.sessionId) })
+
                                         }
                                     }
                                 }
@@ -377,16 +369,18 @@ fun ChatScreen(
             }
         }
     }) {
-    Column(modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+    Column(modifier = Modifier.fillMaxSize().then(if (useSafePadding) Modifier.safeDrawingPadding() else Modifier).imePadding()) {
         Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(10.dp), modifier = Modifier.clickable { scope.launch { if (drawerState.isOpen) drawerState.close() else drawerState.open() } }) {
-                    Text("≡", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                if (showDrawer) {
+                    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(10.dp), modifier = Modifier.clickable { scope.launch { if (drawerState.isOpen) drawerState.close() else drawerState.open() } }) {
+                        Text("≡", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
                 }
-                Spacer(Modifier.width(10.dp))
                 Column(
                     Modifier
                         .weight(1f)
@@ -511,13 +505,37 @@ fun ChatScreen(
             }
         }
 
-        if (state.running && state.activity != null) {
-            Text(
-                state.activity ?: "",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-            )
+        if (state.running) {
+            val statusText = if (state.streamText.isNotBlank()) {
+                "💭 " + state.streamText
+            } else if (state.activity != null) {
+                state.activity ?: ""
+            } else ""
+            if (statusText.isNotBlank()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.width(12.dp).height(12.dp), strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Box(modifier = Modifier.weight(1f).clipToBounds()) {
+                            Text(
+                                statusText,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Clip,
+                                modifier = Modifier.horizontalScroll(rememberScrollState())
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         if (attachments.isNotEmpty()) {
@@ -910,7 +928,7 @@ private fun LoadMoreButton(state: LoadMoreState, onClick: () -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TurnBubble(t: TurnUi, isStreaming: Boolean = false, onGrow: suspend () -> Unit = {}, onOpenFile: (String) -> Unit = {}) {
-    var reasoningOpen by remember(t.turn, t.ended) { mutableStateOf(!t.ended) }
+    var reasoningOpen by remember(t.turn) { mutableStateOf(false) }
     var toolsOpen by remember(t.turn) { mutableStateOf(t.allTools.any { it.resultText.isNullOrBlank() }) }
     val clipboard = LocalClipboardManager.current
     val vm = viewModel<ChatViewModel>()
@@ -923,17 +941,13 @@ fun TurnBubble(t: TurnUi, isStreaming: Boolean = false, onGrow: suspend () -> Un
 
     LaunchedEffect(isStreaming) { if (isStreaming) wasStreaming = true }
 
-    // 流式中正文一出现就折叠思考（正文接着输出，不占空间）
-    // AM-only / 轮次结束：t.ended=true → remember(t.turn, t.ended) 自动重置 reasoningOpen=false
-    LaunchedEffect(tStream.size) {
-        if (tStream.isNotEmpty() && wasStreaming) reasoningOpen = false
-    }
+    
 
     if (t.prompt.isNotBlank()) {
         if (t.promptKind == "system") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp), horizontalArrangement = Arrangement.Center) {
                 Surface(color = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant, shape = MaterialTheme.shapes.small) {
-                    Text(t.prompt, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), fontSize = 11.sp)
+                    SelectionContainer { Text(t.prompt, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), fontSize = 11.sp) }
                 }
             }
         } else {
@@ -947,7 +961,7 @@ fun TurnBubble(t: TurnUi, isStreaming: Boolean = false, onGrow: suspend () -> Un
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.widthIn(max = 320.dp)
                 ) {
-                    MarkdownText(t.prompt, modifier = Modifier.padding(10.dp), fontSize = 14.sp, onRunCode = onRunCode)
+                    SelectionContainer { MarkdownText(t.prompt, modifier = Modifier.padding(10.dp), fontSize = 14.sp, onRunCode = onRunCode) }
                 }
             }
         }
@@ -964,25 +978,25 @@ fun TurnBubble(t: TurnUi, isStreaming: Boolean = false, onGrow: suspend () -> Un
             modifier = Modifier.fillMaxWidth(0.97f)
         ) {
             Column(Modifier.padding(10.dp)) {
-                // 思考过程实时显示：直接拼接所有已收到的 deltas（流式靠后端推送节奏，无延迟）
                 val shownReasoning = if (wasStreaming && rStream.isNotEmpty())
                     rStream.joinToString("") { it.first }.ifBlank { t.reasoningText }
                 else t.reasoningText
                 val hasReasoning = t.reasoningText.isNotBlank() || (wasStreaming && rStream.isNotEmpty())
-                if (hasReasoning) {
-                    if (wasStreaming && !t.ended) {
-                        // 思考中：只显示一行，从左往右滚动，不可展开
+                val hasTools = t.allTools.isNotEmpty()
+                val hasActivity = hasReasoning || hasTools  // 折叠区显示思考 + 工具调用
+                if (hasActivity) {
+                    if (wasStreaming && !t.ended && rStream.isNotEmpty()) {
+                        // 思考中：只显示一行滚动状态
                         Spacer(Modifier.height(4.dp))
-                        LaunchedEffect(shownReasoning) {
+                        val statusText = "💭 " + shownReasoning
+                        LaunchedEffect(statusText) {
                             delay(16)
                             marqueeState.scrollTo(marqueeState.maxValue)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("💭", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(4.dp))
                             Box(modifier = Modifier.weight(1f).clipToBounds()) {
                                 Text(
-                                    shownReasoning,
+                                    statusText,
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -993,22 +1007,36 @@ fun TurnBubble(t: TurnUi, isStreaming: Boolean = false, onGrow: suspend () -> Un
                         }
                         Spacer(Modifier.height(4.dp))
                     } else {
-                        // 思考完成：可展开/折叠
-                        FoldHeader("思考过程", reasoningOpen) { reasoningOpen = !reasoningOpen }
-                        if (reasoningOpen) {
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                shownReasoning,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            HorizontalDivider()
-                            Spacer(Modifier.height(6.dp))
+                        // 思考/工具完成：可展开/折叠，思考 + 工具按顺序集成在一起
+                        val runningTool = t.allTools.find { it.resultText.isNullOrBlank() }
+                        val summary = if (runningTool != null) "思考 + 工具调用中…" else "思考过程"
+                        if (summary.isNotBlank()) {
+                            FoldHeader(summary, reasoningOpen) { reasoningOpen = !reasoningOpen }
+                            if (reasoningOpen) {
+                                if (hasReasoning) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        shownReasoning,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (hasTools) {
+                                    if (hasReasoning) {
+                                        Spacer(Modifier.height(6.dp))
+                                        HorizontalDivider()
+                                        Spacer(Modifier.height(6.dp))
+                                    }
+                                    t.allTools.forEach { tc -> ToolCallItem(tc) }
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                HorizontalDivider()
+                                Spacer(Modifier.height(6.dp))
+                            }
                         }
                     }
                 }
-                // �?step 顺序渲染：文�?�?工具调用交错（工具在调用位置显示，非全部堆后）�?                // �?text �?step（tool/call 事件创建、无对应 AM）合并到前一�?step，避免底部孤立工具调用块
+                // 按 step 顺序渲染：仅文本（工具调用已集成到上方思考区）
                 val mergedSteps = ArrayList<StepUi>()
                 t.steps.forEach { s ->
                     if (s.text.isBlank() && s.responseDeltas.isEmpty() && mergedSteps.size > 0) {
@@ -1027,25 +1055,16 @@ fun TurnBubble(t: TurnUi, isStreaming: Boolean = false, onGrow: suspend () -> Un
                         s.responseDeltas.joinToString("") else s.text
                     if (sShown.isNotBlank()) {
                         if (si > 0) Spacer(Modifier.height(8.dp))
-                        MarkdownText(sShown, fontSize = 14.sp, onRunCode = onRunCode)
+                        SelectionContainer { MarkdownText(sShown, fontSize = 14.sp, onRunCode = onRunCode) }
                         FeedbackBar(s.messageId, feedback, onPut = { mid, r, cat, note -> vm.feedbackPut(mid, r, note, cat) })
                     }
-                    if (s.toolCalls.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        var sOpen by remember(t.turn, si) { mutableStateOf(false) }
-                        Row(
-                            modifier = Modifier.fillMaxWidth().clickable { sOpen = !sOpen },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(if (sOpen) "▼" else "▶", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("工具调用 (" + s.toolCalls.size + ")", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (sOpen) {
-                            Spacer(Modifier.height(4.dp))
-                            s.toolCalls.forEach { tc -> ToolCallItem(tc) }
-                        }
-                    }
                 }
+                // 流式内容更新时自动滚动到底部
+                val streamingContent = mergedSteps.joinToString("|") { s ->
+                    if (wasStreaming && s.responseDeltas.isNotEmpty() && s.text.isEmpty())
+                        s.responseDeltas.joinToString("") else s.text
+                }
+                LaunchedEffect(streamingContent) { if (wasStreaming && !t.ended) onGrow() }
                 if (t.deliverables.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     HorizontalDivider()
@@ -1178,14 +1197,16 @@ private fun MonoText(text: String) {
         shape = RoundedCornerShape(4.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text,
-            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(8.dp),
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            softWrap = false,
-            color = LocalExtendedColors.current.onAssistantBubble
-        )
+        SelectionContainer {
+            Text(
+                text,
+                modifier = Modifier.padding(8.dp),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                softWrap = true,
+                color = LocalExtendedColors.current.onAssistantBubble
+            )
+        }
     }
 }
 

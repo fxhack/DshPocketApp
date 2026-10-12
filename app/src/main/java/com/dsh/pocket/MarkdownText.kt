@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.background
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -226,7 +227,7 @@ private fun CodeBlock(lines: List<String>, lang: String, baseSize: TextUnit, onR
 @Composable
 private fun HeaderBlock(level: Int, text: String, baseSize: TextUnit) {
     val size = when (level) { 1 -> 20f; 2 -> 18f; 3 -> 16f; else -> 14f }
-    Text(text, fontSize = size.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+    SelectionContainer { Text(text, fontSize = size.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground) }
     Spacer(Modifier.height(2.dp))
 }
 
@@ -236,14 +237,14 @@ private fun ItemBlock(text: String, ordered: Boolean, index: Int, baseSize: Text
     Row(Modifier.padding(start = 12.dp)) {
         Text(prefix, fontSize = baseSize, color = MaterialTheme.colorScheme.onBackground)
         Spacer(Modifier.width(2.dp))
-        Box(Modifier.weight(1f)) { Text(buildInline(text), fontSize = baseSize, color = MaterialTheme.colorScheme.onBackground) }
+        Box(Modifier.weight(1f)) { SelectionContainer { Text(buildInline(text), fontSize = baseSize, color = MaterialTheme.colorScheme.onBackground) } }
     }
 }
 
 @Composable
 private fun ParaBlock(text: String, baseSize: TextUnit) {
     val paras = if (text.lines().size > MAX_PARA_LINES) text.split("\n") else listOf(text)
-    paras.forEach { p -> Text(buildInline(p), fontSize = baseSize, color = MaterialTheme.colorScheme.onBackground) }
+    paras.forEach { p -> SelectionContainer { Text(buildInline(p), fontSize = baseSize, color = MaterialTheme.colorScheme.onBackground) } }
 }
 
 @Composable
@@ -251,7 +252,7 @@ private fun QuoteBlock(text: String, baseSize: TextUnit) {
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(start = 8.dp, top = 3.dp, bottom = 3.dp)) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)))
         Spacer(Modifier.width(8.dp))
-        Text(buildInline(text), fontSize = baseSize, color = MaterialTheme.colorScheme.onSurfaceVariant, fontStyle = FontStyle.Italic, modifier = Modifier.weight(1f))
+        SelectionContainer { Text(buildInline(text), fontSize = baseSize, color = MaterialTheme.colorScheme.onSurfaceVariant, fontStyle = FontStyle.Italic, modifier = Modifier.weight(1f)) }
     }
 }
 

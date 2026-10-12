@@ -27,7 +27,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -70,10 +69,10 @@ fun SessionListScreen(
     onPin: (String) -> Unit,
     onUnpin: (String) -> Unit,
     themeMode: String = "system",
-    onThemeChange: (String) -> Unit = {}
+    onThemeChange: (String) -> Unit = {},
+    useSafePadding: Boolean = true
 ) {
     var query by remember { mutableStateOf("") }
-    var showArchived by remember { mutableStateOf(false) }
     var expandedGroups by remember { mutableStateOf<Map<String, Boolean>>(mapOf("__ungrouped__" to true)) }
     LaunchedEffect(baseline) {
         baseline?.items?.forEach { w -> if (w.workspaceId !in expandedGroups) expandedGroups = expandedGroups + (w.workspaceId to true) }
@@ -96,11 +95,11 @@ fun SessionListScreen(
         (baseline?.items ?: emptyList()).associate { it.workspaceId to it }
     }
 
-    val filtered = remember(sessions, query, showArchived, archivedIds) {
+    val filtered = remember(sessions, query, archivedIds) {
         val q = query.trim().lowercase()
         sessions.filter { s ->
             val isArchived = archivedIds.contains(s.sessionId)
-            if (!showArchived && isArchived) false
+            if (isArchived) false
             else if (q.isEmpty()) true
             else s.projections.values.title.orEmpty().lowercase().contains(q)
         }.sortedByDescending { pinnedIds.contains(it.sessionId) }
@@ -112,7 +111,7 @@ fun SessionListScreen(
 
     val timeFmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
 
-    Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+    Column(Modifier.fillMaxSize().then(if (useSafePadding) Modifier.safeDrawingPadding() else Modifier)) {
         // 顶部栏
         Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -132,7 +131,7 @@ fun SessionListScreen(
                 }
             }
         }
-        // 搜索框 + 归档切换
+        // 搜索框
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = query, onValueChange = { query = it },
@@ -141,12 +140,6 @@ fun SessionListScreen(
                 singleLine = true,
                 shape = MaterialTheme.shapes.large
             )
-            Spacer(Modifier.width(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("归档", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.width(4.dp))
-                Switch(checked = showArchived, onCheckedChange = { showArchived = it })
-            }
         }
 
         if (loading && sessions.isEmpty()) {
@@ -222,7 +215,6 @@ fun SessionListScreen(
                                             DropdownMenu(expanded = menuSession?.sessionId == s.sessionId && menuAnchor, onDismissRequest = { menuAnchor = false }) {
                                                 DropdownMenuItem(text = { Text("重命名") }, onClick = { menuAnchor = false; renameTarget = s })
                                                 DropdownMenuItem(text = { Text(if (isPinned) "取消置顶" else "置顶") }, onClick = { menuAnchor = false; if (isPinned) onUnpin(s.sessionId) else onPin(s.sessionId) })
-                                                DropdownMenuItem(text = { Text(if (isArchived) "取消归档" else "归档") }, onClick = { menuAnchor = false; if (isArchived) onUnarchive(s.sessionId) else onArchive(s.sessionId) })
                                                 DropdownMenuItem(text = { Text("复制会话") }, onClick = { menuAnchor = false })
                                             }
                                         }

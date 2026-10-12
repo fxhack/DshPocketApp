@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +14,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+
+
+
+
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
@@ -41,7 +47,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
+
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -95,6 +103,7 @@ fun NativeApp(phoneOpener: PhoneFileOpener, themeMode: String = "system", onThem
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val baseline by WorkspaceStore.baseline.collectAsState()
+    
 
     LaunchedEffect(Unit) {
         WorkspaceStore.start()
@@ -134,32 +143,54 @@ fun NativeApp(phoneOpener: PhoneFileOpener, themeMode: String = "system", onThem
         }
     }
 
-    when (screen) {
-        "setup" -> SetupScreen(loading, error, DshRepository.client.serverUrl, DshRepository.pin, doLogin)
-        "loading" -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+    // 公共回调
+    val doRefresh: () -> Unit = { scope.launch { loading = true; error = null; try { sessions = DshRepository.listSessions() } catch (e: Exception) { error = e.message } finally { loading = false } } }
+    val doSilentRefresh: () -> Unit = { scope.launch { try { sessions = DshRepository.listSessions() } catch (_: Exception) {} } }
+    val doOpenFiles: () -> Unit = { val s = sessions.firstOrNull { it.sessionId.isNotEmpty() }; filesScope = s?.sessionId; filesPath = ""; filesCwd = s?.cwd ?: ""; screen = "files" }
+    val doArchive: (String) -> Unit = { sid: String -> scope.launch { try { DshRepository.archiveSession(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} } }
+    val doUnarchive: (String) -> Unit = { sid: String -> scope.launch { try { DshRepository.unarchiveSession(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} } }
+    val doRename: (String, String) -> Unit = { sid: String, t: String -> scope.launch { try { DshRepository.rename(sid, t); sessions = DshRepository.listSessions() } catch (_: Exception) {} } }
+    val doPin: (String) -> Unit = { sid: String -> scope.launch { try { DshRepository.pinSession(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} } }
+    val doUnpin: (String) -> Unit = { sid: String -> scope.launch { try { DshRepository.unpinSession(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} } }
+
+    when {
+        screen == "setup" -> SetupScreen(loading, error, DshRepository.client.serverUrl, DshRepository.pin, doLogin)
+        screen == "loading" -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator()
             Spacer(Modifier.height(12.dp))
             Text("连接中…", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        "list" -> SessionListScreen(
+        
+        screen == "list" -> SessionListScreen(
             sessions, baseline, loading, error,
-            { scope.launch { loading = true; error = null; try { sessions = DshRepository.listSessions() } catch (e: Exception) { error = e.message } finally { loading = false } } },
-            { scope.launch { try { sessions = DshRepository.listSessions() } catch (_: Exception) {} } },
+            doRefresh, doSilentRefresh,
             { sid -> Prefs.saveLastSession(sid); currentSession = sid; screen = "chat" },
-            { val s = sessions.firstOrNull { it.sessionId.isNotEmpty() }; filesScope = s?.sessionId; filesPath = ""; filesCwd = s?.cwd ?: ""; screen = "files" },
+            doOpenFiles,
             { ws -> scope.launch { try { currentSession = DshRepository.createSession(ws); Prefs.saveLastSession(currentSession); screen = "chat" } catch (e: Exception) { error = e.message } } },
-            { sid -> scope.launch { try { DshRepository.archiveSession(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} } },
-            { sid -> scope.launch { try { DshRepository.unarchiveSession(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} } },
-            { sid, t -> scope.launch { try { DshRepository.rename(sid, t); sessions = DshRepository.listSessions() } catch (_: Exception) {} } },
-            { sid -> scope.launch { try { DshRepository.pinSession(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} } },
-            { sid -> scope.launch { try { DshRepository.unpinSession(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} } },
-            themeMode = themeMode,
-            onThemeChange = onThemeChange
+            doArchive, doUnarchive, doRename, doPin, doUnpin,
+            themeMode = themeMode, onThemeChange = onThemeChange
         )
-        "chat" -> ChatScreen(currentSession ?: "", null, onBack = { screen = "list"; scope.launch { sessions = DshRepository.listSessions() } }, onBrowseFiles = { sid, cwd -> filesScope = sid; filesPath = ""; filesCwd = cwd; screen = "files" }, onOpenSettings = { screen = "settings" }, phoneOpener = phoneOpener, sessions = sessions, onSelectSession = { sid -> Prefs.saveLastSession(sid); currentSession = sid }, onNewSession = { ws -> scope.launch { try { currentSession = DshRepository.createSession(ws); Prefs.saveLastSession(currentSession); sessions = DshRepository.listSessions() } catch (_: Exception) {} } }, baseline = baseline, loadingSessions = loading, errorSessions = error, onRefreshSessions = { scope.launch { loading = true; error = null; try { sessions = DshRepository.listSessions() } catch (e: Exception) { error = e.message } finally { loading = false } } }, onSilentRefreshSessions = { scope.launch { try { sessions = DshRepository.listSessions() } catch (_: Exception) {} } }, onArchiveSession = { sid -> scope.launch { loading = true; try { WorkspaceStore.archive(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } }, onUnarchiveSession = { sid -> scope.launch { loading = true; try { WorkspaceStore.unarchive(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } }, onRenameSession = { sid, t -> scope.launch { loading = true; try { DshRepository.rename(sid, t); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } }, onPinSession = { sid -> scope.launch { loading = true; try { WorkspaceStore.pin(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } }, onUnpinSession = { sid -> scope.launch { loading = true; try { WorkspaceStore.unpin(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } }, onFiles = { val s = sessions.firstOrNull { it.sessionId.isNotEmpty() }; filesScope = s?.sessionId; filesPath = ""; filesCwd = s?.cwd ?: ""; screen = "files" }, themeMode = themeMode, onThemeChange = onThemeChange)
-        "files" -> FilesScreen(filesScope, filesPath, filesCwd, phoneOpener, onPreview = { sid, p -> previewScope = sid; previewPath = p; screen = "preview" }, onBack = { screen = "list" })
-        "preview" -> PreviewScreen(previewScope ?: "", previewPath, onBack = { screen = "files" })
-        "settings" -> SettingsScreen(onBack = { screen = "list" }, onLogout = { screen = "login" })
+        screen == "chat" -> ChatScreen(
+            currentSession ?: "", null,
+            onBack = { screen = "list"; scope.launch { sessions = DshRepository.listSessions() } },
+            onBrowseFiles = { sid, cwd -> filesScope = sid; filesPath = ""; filesCwd = cwd; screen = "files" },
+            onOpenSettings = { screen = "settings" },
+            phoneOpener = phoneOpener, sessions = sessions,
+            onSelectSession = { sid -> Prefs.saveLastSession(sid); currentSession = sid },
+            onNewSession = { ws -> scope.launch { try { currentSession = DshRepository.createSession(ws); Prefs.saveLastSession(currentSession); sessions = DshRepository.listSessions() } catch (_: Exception) {} } },
+            baseline = baseline, loadingSessions = loading, errorSessions = error,
+            onRefreshSessions = doRefresh, onSilentRefreshSessions = doSilentRefresh,
+            onArchiveSession = { sid -> scope.launch { loading = true; try { WorkspaceStore.archive(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } },
+            onUnarchiveSession = { sid -> scope.launch { loading = true; try { WorkspaceStore.unarchive(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } },
+            onRenameSession = { sid, t -> scope.launch { loading = true; try { DshRepository.rename(sid, t); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } },
+            onPinSession = { sid -> scope.launch { loading = true; try { WorkspaceStore.pin(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } },
+            onUnpinSession = { sid -> scope.launch { loading = true; try { WorkspaceStore.unpin(sid); sessions = DshRepository.listSessions() } catch (_: Exception) {} finally { loading = false } } },
+            onFiles = doOpenFiles,
+            themeMode = themeMode, onThemeChange = onThemeChange
+        )
+        screen == "files" -> FilesScreen(filesScope, filesPath, filesCwd, phoneOpener, onPreview = { sid, p -> previewScope = sid; previewPath = p; screen = "preview" }, onBack = { screen = "list" })
+        screen == "preview" -> PreviewScreen(previewScope ?: "", previewPath, onBack = { screen = "files" })
+        screen == "settings" -> SettingsScreen(onBack = { screen = "list" }, onLogout = { screen = "login" })
     }
 }
 
@@ -179,7 +210,7 @@ fun SetupScreen(loading: Boolean, error: String?, initialUrl: String, initialPin
         Spacer(Modifier.height(24.dp))
         ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)) {
             Column(Modifier.padding(20.dp)) {
-                OutlinedTextField(value = url, onValueChange = { url = it }, placeholder = { Text("http://192.168.x.x:3081") }, label = { Text("服务器地址") }, singleLine = true, shape = fieldShape, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = url, onValueChange = { url = it }, placeholder = { Text("http://<电脑IP>:3081") }, label = { Text("服务器地址") }, singleLine = true, shape = fieldShape, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(value = pin, onValueChange = { pin = it }, label = { Text("PIN") }, singleLine = true, shape = fieldShape, modifier = Modifier.fillMaxWidth())
                 error?.let { Spacer(Modifier.height(8.dp)); Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.fillMaxWidth()) }

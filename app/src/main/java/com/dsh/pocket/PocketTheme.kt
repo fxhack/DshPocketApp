@@ -92,8 +92,8 @@ data class PocketExtendedColors(
 )
 
 private val LightExtended = PocketExtendedColors(
-    userBubble = Color(0xFF4F6EF7),
-    onUserBubble = Color.White,
+    userBubble = Color(0xFFE8F0FE),
+    onUserBubble = Color(0xFF1B1B1F),
     assistantBubble = Color(0xFFF0F0F5),
     onAssistantBubble = Color(0xFF1B1B1F),
     codeBackground = Color(0xFFF5F5F8),
@@ -103,7 +103,7 @@ private val LightExtended = PocketExtendedColors(
 )
 
 private val DarkExtended = PocketExtendedColors(
-    userBubble = Color(0xFF2A43A5),
+    userBubble = Color(0xFF2A3A5C),
     onUserBubble = Color(0xFFDCE4FF),
     assistantBubble = Color(0xFF1E1F24),
     onAssistantBubble = Color(0xFFE4E2E6),

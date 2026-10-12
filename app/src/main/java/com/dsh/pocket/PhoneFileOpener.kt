@@ -25,7 +25,7 @@ class PhoneFileOpener(private val activity: Activity) {
         toast("正在从电脑获取「" + displayName + "」…")
         Thread {
             try {
-                val url = URL(Config.SERVER_URL + "/api/file?path=" + URLEncoder.encode(absolutePath, "UTF-8"))
+                val url = URL(DshRepository.client.serverUrl + "/api/file?path=" + URLEncoder.encode(absolutePath, "UTF-8"))
                 val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.connectTimeout = 15000

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">harness</string>
+    <string name="app_name">DSHA</string>
     <string name="error_unreachable">无法连接到电脑上的 DSH\n请确认手机与电脑在同一局域网，且 DeepSeek Harness（dsh web）正在运行</string>
     <string name="retry">重试</string>
 </resources>

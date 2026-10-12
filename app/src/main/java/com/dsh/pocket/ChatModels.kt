@@ -157,5 +157,7 @@ data class ChatState(
     /** 历史细节（思考/工具）是否已由 follow 快照补齐。 */
     val detailLoaded: Boolean = false,
     /** 递增计数：发送后让 UI 跳到底部。 */
-    val scrollToken: Int = 0
+    val scrollToken: Int = 0,
+    /** 当前流式文本（思考或回复），用于状态栏滚动显示。 */
+    val streamText: String = ""
 )

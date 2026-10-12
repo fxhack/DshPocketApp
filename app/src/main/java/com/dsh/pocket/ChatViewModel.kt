@@ -499,11 +499,11 @@ class ChatViewModel : ViewModel() {
             }
             when (ev.type) {
                 "turn/end" -> {
-                    _state.value = _state.value.copy(running = false, activity = null)
+                    _state.value = _state.value.copy(running = false, activity = null, streamText = "")
                     publishNow()
                 }
                 "turn/start" -> {
-                    _state.value = _state.value.copy(running = true, activity = label ?: "开始回复")
+                    _state.value = _state.value.copy(running = true, activity = label ?: "开始回复", streamText = "")
                     if (changed) publishNow()
                 }
                 else -> {
@@ -519,8 +519,25 @@ class ChatViewModel : ViewModel() {
     private suspend fun onLiveChunk(frame: JsonElement) {
         val fr = (frame as? JsonObject)?.get("frame") as? JsonObject ?: return
         var changed = false
-        mutex.withLock { if (SessionReducer.applyLiveChunk(buf, fr)) changed = true }
-        if (changed) publishThrottled()
+        var chunkText = ""
+        mutex.withLock {
+            val type = (fr["type"] as? JsonPrimitive)?.content
+            if (type == "chunk") {
+                val chunk = fr["chunk"] as? JsonObject
+                val text = (chunk?.get("text") as? JsonPrimitive)?.content
+                if (text != null) chunkText = text
+            }
+            if (SessionReducer.applyLiveChunk(buf, fr)) changed = true
+        }
+        if (changed) {
+            // 更新流式文本用于状态栏滚动显示
+            if (chunkText.isNotEmpty()) {
+                _state.value = _state.value.copy(
+                    streamText = (_state.value.streamText + chunkText).takeLast(200)
+                )
+            }
+            publishThrottled()
+        }
     }
 
     private suspend fun maybeLoadPage() {
